@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Knowledge Realm RPG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --accent: #3b82f6;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: #f8fafc;
+            overflow: hidden; /* Prevent body scroll, handle in containers */
+        }
+        .rpg-font { font-family: 'Press Start 2P', cursive; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes damage {
+            0% { transform: translateX(0); color: white; }
+            20% { transform: translateX(-5px); color: red; }
+            40% { transform: translateX(5px); color: red; }
+            60% { transform: translateX(-5px); color: red; }
+            80% { transform: translateX(5px); color: red; }
+            100% { transform: translateX(0); color: white; }
+        }
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        @keyframes fadeOutUp {
+            0% { opacity: 1; transform: translateY(0); }
+            100% { opacity: 0; transform: translateY(-30px); }
+        }
+        
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        .animate-damage { animation: damage 0.4s ease-in-out; }
+        .animate-pop { animation: pop 0.3s ease-in-out; }
+        
+        .floating-text {
+            position: absolute;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px black;
+            pointer-events: none;
+            animation: fadeOutUp 1.5s ease-out forwards;
+            z-index: 20;
+        }
+
+        /* Avatar Layering */
+        .avatar-container {
+            position: relative;
+            width: 96px;
+            height: 96px;
+            font-size: 64px;
+            line-height: 96px;
+            text-align: center;
+        }
+        .avatar-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .layer-pet { transform: translate(40%, 40%) scale(0.5); z-index: 4; }
+        .layer-hat { transform: translateY(-40%); z-index: 3; }
+        .layer-weapon { transform: translate(-40%, 20%) rotate(-45deg); z-index: 2; }
+        .layer-base { z-index: 1; }
+
+        /* Disable selection */
+        .no-select { user-select: none; }
+    </style>
+</head>
+<body class="flex flex-col h-screen w-full">
+
+    <!-- Top Bar -->
+    <header class="bg-slate-900 border-b border-slate-700 p-3 shadow-lg z-30 shrink-0">
+        <div class="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
+            <div class="flex items-center gap-4 w-full sm:w-auto">
+                <div>
+                    <h1 class="rpg-font text-xs sm:text-sm text-blue-400">Knowledge Realm</h1>
+                    <div class="text-xs text-slate-400 mt-1">Lvl <span id="ui-level">1</span> | Exp: <span id="ui-exp">0</span>/<span id="ui-max-exp">100</span></div>
+                </div>
+                <div class="ml-auto sm:ml-4 text-center border border-slate-600 bg-slate-800 rounded px-3 py-1">
+                    <div class="text-[10px] text-slate-400 uppercase tracking-wider">Burnout Guard</div>
+                    <div id="ui-timer" class="rpg-font text-green-400 text-sm">60:00</div>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto text-sm">
+                <input type="password" id="api-key" placeholder="Gemini API Key (Opt)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 focus:outline-none focus:border-blue-500 w-full sm:w-36">
+                <input type="text" id="topic-input" placeholder="Topic (e.g. Algebra)" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 focus:outline-none focus:border-blue-500 w-full sm:w-36">
+            </div>
+        </div>
+        
+        <!-- Player Vitals (Top Bar) -->
+        <div class="max-w-4xl mx-auto mt-2 flex gap-4 text-sm font-bold">
+            <div class="flex-1">
+                <div class="flex justify-between text-red-400 text-xs mb-1"><span>HP</span><span id="ui-hp-text">100/100</span></div>
+                <div class="h-3 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div id="ui-hp-bar" class="h-full bg-red-500 transition-all duration-300 w-full"></div>
+                </div>
+            </div>
+            <div class="flex-1">
+                <div class="flex justify-between text-blue-400 text-xs mb-1"><span>MP</span><span id="ui-mp-text">50/50</span></div>
+                <div class="h-3 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                    <div id="ui-mp-bar" class="h-full bg-blue-500 transition-all duration-300 w-full"></div>
+                </div>
+            </div>
+            <div class="flex items-center gap-1 text-yellow-400">
+                <span>💰</span><span id="ui-gold">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 overflow-y-auto relative bg-slate-950 pb-24" id="main-container">
+        
+        <!-- Tab: Battle -->
+        <section id="tab-battle" class="max-w-4xl mx-auto p-4 flex flex-col min-h-full">
+            
+            <!-- Battlefield -->
+            <div class="flex-1 flex items-center justify-around rounded-xl bg-slate-800/50 border border-slate-700 p-8 mb-6 relative overflow-hidden shadow-[inset_0_0_50px_rgba(0,0,0,0.5)]">
+                <!-- Background decor -->
+                <div class="absolute inset-0 opacity-10 pointer-events-none" style="background-image: radial-gradient(#475569 1px, transparent 1px); background-size: 20px 20px;"></div>
+                
+                <!-- Player Avatar -->
+                <div class="relative flex flex-col items-center">
+                    <div class="text-xs text-blue-300 mb-2 font-bold bg-slate-900/80 px-2 py-1 rounded">You</div>
+                    <div class="avatar-container bg-slate-700/50 rounded-full shadow-lg border-2 border-slate-600 animate-float" id="player-avatar-battle">
+                        <div class="avatar-layer layer-base">🧑‍🎓</div>
+                        <div class="avatar-layer layer-weapon" id="avatar-weapon-battle"></div>
+                        <div class="avatar-layer layer-hat" id="avatar-hat-battle"></div>
+                        <div class="avatar-layer layer-pet" id="avatar-pet-battle"></div>
+                    </div>
+                </div>
+
+                <div class="rpg-font text-slate-500 text-xl">VS</div>
+
+                <!-- Monster Avatar -->
+                <div class="relative flex flex-col items-center">
+                    <div class="text-xs text-red-300 mb-2 font-bold bg-slate-900/80 px-2 py-1 rounded" id="monster-name">Goblin</div>
+                    <div id="monster-sprite" class="text-6xl animate-float" style="animation-delay: -1.5s;">👹</div>
+                    
+                    <!-- Monster Vitals -->
+                    <div class="w-24 mt-4">
+                        <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                            <div id="monster-hp-bar" class="h-full bg-red-500 transition-all duration-300 w-full"></div>
+                        </div>
+                        <div class="text-center text-[10px] mt-1 text-slate-400"><span id="monster-hp-text">20/20</span> HP</div>
+                    </div>
+                    <!-- Status Effects -->
+                    <div id="monster-status" class="absolute -top-4 -right-4 flex gap-1"></div>
+                </div>
+            </div>
+
+            <!-- Action Menu -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-lg">
+                <h2 class="text-sm font-bold text-slate-400 mb-3 uppercase tracking-wider">Select Spell (Consumes MP instantly)</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="spell-container">
+                    <!-- Spells populated via JS -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab: Shop -->
+        <section id="tab-shop" class="max-w-4xl mx-auto p-4 hidden">
+            <h2 class="rpg-font text-xl text-yellow-400 mb-6 text-center">Merchants Hub</h2>
+            <div class="bg-blue-900/20 border border-blue-800 text-blue-200 p-3 rounded-lg text-sm mb-6 text-center">
+                Defeat monsters to earn Gold. Buy gear to boost your stats!
+            </div>
+            
+            <div id="shop-items-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Shop items populated by JS -->
+            </div>
+        </section>
+
+        <!-- Tab: Wardrobe -->
+        <section id="tab-wardrobe" class="max-w-4xl mx-auto p-4 hidden">
+            <h2 class="rpg-font text-xl text-purple-400 mb-6 text-center">Equipment</h2>
+            
+            <div class="flex flex-col md:flex-row gap-6">
+                <!-- Current Avatar Preview -->
+                <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center min-w-[250px]">
+                    <h3 class="text-slate-400 text-sm font-bold uppercase mb-6">Current Appearance</h3>
+                    <div class="avatar-container bg-slate-700/50 rounded-full shadow-lg border-2 border-slate-600 mb-6" id="player-avatar-wardrobe">
+                        <div class="avatar-layer layer-base">🧑‍🎓</div>
+                        <div class="avatar-layer layer-weapon" id="avatar-weapon-wardrobe"></div>
+                        <div class="avatar-layer layer-hat" id="avatar-hat-wardrobe"></div>
+                        <div class="avatar-layer layer-pet" id="avatar-pet-wardrobe"></div>
+                    </div>
+                    <div class="w-full text-sm bg-slate-900 rounded p-3 text-slate-300">
+                        <div class="font-bold text-white mb-2 border-b border-slate-700 pb-1">Stats Bonus</div>
+                        <div class="flex justify-between"><span>Max HP:</span> <span id="stat-bonus-hp" class="text-green-400">+0</span></div>
+                        <div class="flex justify-between"><span>Base Dmg:</span> <span id="stat-bonus-dmg" class="text-red-400">+0</span></div>
+                        <div class="flex justify-between"><span>Lifesteal:</span> <span id="stat-bonus-ls" class="text-purple-400">+0</span></div>
+                    </div>
+                </div>
+
+                <!-- Inventory Lists -->
+                <div class="flex-1 flex flex-col gap-4" id="inventory-container">
+                    <!-- Populated by JS (Hats, Weapons, Pets sections) -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab: Log -->
+        <section id="tab-log" class="max-w-4xl mx-auto p-4 hidden h-full flex flex-col">
+            <h2 class="rpg-font text-xl text-slate-300 mb-4">Adventure Log</h2>
+            <div id="battle-log" class="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-4 overflow-y-auto text-sm space-y-2 font-mono">
+                <div class="text-slate-500">Welcome to the Knowledge Realm...</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Bottom Navigation (Fixed) -->
+    <nav class="fixed bottom-0 left-0 w-full bg-slate-900 border-t border-slate-700 z-40 pb-safe">
+        <div class="max-w-4xl mx-auto flex h-16">
+            <button onclick="switchTab('battle')" id="nav-battle" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border-b-2 border-transparent">
+                <span class="text-xl mb-1">⚔️</span>
+                <span class="text-[10px] uppercase font-bold tracking-widest">Battle</span>
+            </button>
+            <button onclick="switchTab('shop')" id="nav-shop" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border-b-2 border-transparent">
+                <span class="text-xl mb-1">🏪</span>
+                <span class="text-[10px] uppercase font-bold tracking-widest">Shop</span>
+            </button>
+            <button onclick="switchTab('wardrobe')" id="nav-wardrobe" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border-b-2 border-transparent">
+                <span class="text-xl mb-1">🎒</span>
+                <span class="text-[10px] uppercase font-bold tracking-widest">Gear</span>
+            </button>
+            <button onclick="switchTab('log')" id="nav-log" class="nav-btn flex-1 flex flex-col items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors border-b-2 border-transparent">
+                <span class="text-xl mb-1">📜</span>
+                <span class="text-[10px] uppercase font-bold tracking-widest">Log</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Question Modal -->
+    <div id="question-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-slate-800 border-2 border-accent rounded-2xl p-6 max-w-lg w-full shadow-2xl transform transition-all">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="text-xl font-bold text-white">Focus Channeling...</h3>
+                <span id="casting-spell-name" class="px-2 py-1 bg-blue-900/50 text-blue-300 text-xs font-bold rounded uppercase tracking-wider">Spell</span>
+            </div>
+            
+            <div id="question-loading" class="hidden text-center py-8">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500 mb-2"></div>
+                <p class="text-slate-400 text-sm">Consulting the ancient tomes (Generating question)...</p>
+            </div>
+
+            <div id="question-content" class="hidden">
+                <p id="question-text" class="text-lg text-slate-200 mb-6 font-medium leading-relaxed"></p>
+                <div id="question-options" class="grid grid-cols-1 gap-3">
+                    <!-- Options injected here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Toaster -->
+    <div id="toaster" class="fixed top-20 left-1/2 transform -translate-x-1/2 z-[60] transition-all duration-300 opacity-0 pointer-events-none translate-y-[-20px]">
+        <div class="bg-slate-800 border border-slate-600 shadow-xl rounded-lg px-6 py-3 text-center text-white font-bold" id="toaster-text">
+            Message
+        </div>
+    </div>
+
+    <!-- Forced Break Modal (Unskippable) -->
+    <div id="break-modal" class="fixed inset-0 bg-slate-950 z-[100] hidden flex-col items-center justify-center p-6 text-center">
+        <div class="text-6xl mb-6 animate-float">🧘‍♀️</div>
+        <h2 class="rpg-font text-2xl text-red-400 mb-4">Mandatory Rest</h2>
+        <div class="max-w-md text-slate-300 space-y-4 mb-8 text-sm leading-relaxed bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-xl">
+            <p>You've been studying for an hour. It's time to step away.</p>
+            <p><strong>Why force a break?</strong> Studies show human focus sharply declines after 60-70 minutes. Pushing through leads to fatigue, irritability, and ultimately <em>burnout</em>—where you retain nothing and feel awful.</p>
+            <p>Stand up, stretch, get some water, and rest your eyes. The realm will wait for your return.</p>
+        </div>
+        <div class="rpg-font text-5xl text-white mb-2" id="break-timer-display">10:00</div>
+        <div class="text-slate-500 text-xs uppercase tracking-widest">Time Remaining</div>
+    </div>
+
+    <script>
+        // --- 1. DATABASES & CONSTANTS ---
+        const ITEMS = {
+            hats: [
+                { id: 'h1', name: 'Apprentice Cap', icon: '🧢', price: 50, stats: { hp: 10 }, desc: '+10 Max HP' },
+                { id: 'h2', name: 'Mage Hood', icon: '🧙‍♂️', price: 150, stats: { hp: 25 }, desc: '+25 Max HP' },
+                { id: 'h3', name: 'Knight Helm', icon: '🪖', price: 300, stats: { hp: 50 }, desc: '+50 Max HP' },
+                { id: 'h4', name: 'Crown of Wisdom', icon: '👑', price: 600, stats: { hp: 100 }, desc: '+100 Max HP' },
+                { id: 'h5', name: 'Ninja Band', icon: '🥷', price: 1000, stats: { hp: 150 }, desc: '+150 Max HP' },
+                { id: 'h6', name: 'Halo of Truth', icon: '😇', price: 2000, stats: { hp: 300 }, desc: '+300 Max HP' }
+            ],
+            weapons: [
+                { id: 'w1', name: 'Wooden Wand', icon: '🪄', price: 50, stats: { dmg: 5 }, desc: '+5 Base Dmg' },
+                { id: 'w2', name: 'Scholar Ruler', icon: '📏', price: 150, stats: { dmg: 12 }, desc: '+12 Base Dmg' },
+                { id: 'w3', name: 'Iron Sword', icon: '🗡️', price: 300, stats: { dmg: 25 }, desc: '+25 Base Dmg' },
+                { id: 'w4', name: 'Magic Bow', icon: '🏹', price: 600, stats: { dmg: 45 }, desc: '+45 Base Dmg' },
+                { id: 'w5', name: 'Trident of Lore', icon: '🔱', price: 1000, stats: { dmg: 80 }, desc: '+80 Base Dmg' },
+                { id: 'w6', name: 'Excalibur', icon: '⚔️', price: 2000, stats: { dmg: 150 }, desc: '+150 Base Dmg' }
+            ],
+            pets: [
+                { id: 'p1', name: 'Study Mouse', icon: '🐁', price: 200, stats: { ls: 2 }, desc: '+2 HP Lifesteal on hit' },
+                { id: 'p2', name: 'Clever Cat', icon: '🐈', price: 500, stats: { ls: 5 }, desc: '+5 HP Lifesteal on hit' },
+                { id: 'p3', name: 'Loyal Dog', icon: '🐕', price: 1000, stats: { ls: 10 }, desc: '+10 HP Lifesteal on hit' },
+                { id: 'p4', name: 'Wise Owl', icon: '🦉', price: 2000, stats: { ls: 18 }, desc: '+18 HP Lifesteal on hit' },
+                { id: 'p5', name: 'Fierce Tiger', icon: '🐅', price: 4000, stats: { ls: 30 }, desc: '+30 HP Lifesteal on hit' },
+                { id: 'p6', name: 'Dragonling', icon: '🐉', price: 8000, stats: { ls: 50 }, desc: '+50 HP Lifesteal on hit' }
+            ]
+        };
+
+        const SPELLS = [
+            { id: 'strike', name: 'Strike', icon: '💥', cost: 0, desc: 'Basic attack. Deals base + weapon dmg.', color: 'bg-red-600 hover:bg-red-500' },
+            { id: 'heal', name: 'Heal', icon: '💚', cost: 15, desc: 'Restores 40 HP.', color: 'bg-green-600 hover:bg-green-500' },
+            { id: 'poison', name: 'Poison', icon: '🧪', cost: 15, desc: 'Applies DoT: 8 dmg/turn for 3 turns.', color: 'bg-purple-600 hover:bg-purple-500' },
+            { id: 'freeze', name: 'Freeze', icon: '❄️', cost: 30, desc: 'Skips monster\'s next turn.', color: 'bg-cyan-600 hover:bg-cyan-500' }
+        ];
+
+        const MONSTER_EMOJIS = ['👹','👺','👻','💀','👽','👾','🤖','🦇','🕷️','🦂','🦖','🐙'];
+
+        // Comprehensive Mock Database (45 questions)
+        const MOCK_DB = [
+            // Math (15)
+            { q: "What is 15% of 200?", o: ["30", "15", "20", "45"], a: "30" },
+            { q: "Solve for x: 2x + 5 = 15", o: ["5", "10", "4", "6"], a: "5" },
+            { q: "What is the square root of 144?", o: ["12", "14", "10", "16"], a: "12" },
+            { q: "What is the value of Pi to two decimal places?", o: ["3.14", "3.16", "3.12", "3.18"], a: "3.14" },
+            { q: "Calculate: 7 x 8 - 4", o: ["52", "60", "24", "28"], a: "52" },
+            { q: "If a triangle has angles 90 and 45, what is the third?", o: ["45", "90", "60", "30"], a: "45" },
+            { q: "What is 2 to the power of 5?", o: ["32", "16", "64", "10"], a: "32" },
+            { q: "Solve: (10 + 2) / 4", o: ["3", "4", "2", "6"], a: "3" },
+            { q: "What is the area of a rectangle 5 by 10?", o: ["50", "15", "100", "25"], a: "50" },
+            { q: "Is 47 a prime number?", o: ["Yes", "No", "Only on Tuesdays", "It's an even number"], a: "Yes" },
+            { q: "What is 100 divided by 0.5?", o: ["200", "50", "150", "10"], a: "200" },
+            { q: "Calculate the perimeter of a square with side 6.", o: ["24", "36", "12", "18"], a: "24" },
+            { q: "What is the next number: 2, 4, 8, 16, ...", o: ["32", "24", "20", "64"], a: "32" },
+            { q: "Solve: 5! (5 factorial)", o: ["120", "60", "25", "100"], a: "120" },
+            { q: "Convert 1/4 to a percentage.", o: ["25%", "20%", "40%", "14%"], a: "25%" },
+            // Science (15)
+            { q: "What is the powerhouse of the cell?", o: ["Mitochondria", "Nucleus", "Ribosome", "Membrane"], a: "Mitochondria" },
+            { q: "What is H2O more commonly known as?", o: ["Water", "Salt", "Hydrogen peroxide", "Air"], a: "Water" },
+            { q: "Which planet is known as the Red Planet?", o: ["Mars", "Venus", "Jupiter", "Saturn"], a: "Mars" },
+            { q: "What gas do plants absorb during photosynthesis?", o: ["Carbon Dioxide", "Oxygen", "Nitrogen", "Helium"], a: "Carbon Dioxide" },
+            { q: "What force keeps us on the ground?", o: ["Gravity", "Magnetism", "Friction", "Tension"], a: "Gravity" },
+            { q: "What is the hardest natural substance on Earth?", o: ["Diamond", "Gold", "Iron", "Quartz"], a: "Diamond" },
+            { q: "How many bones are in the adult human body?", o: ["206", "150", "300", "256"], a: "206" },
+            { q: "What is the boiling point of water in Celsius?", o: ["100", "0", "50", "212"], a: "100" },
+            { q: "Which element has the chemical symbol 'O'?", o: ["Oxygen", "Gold", "Osmium", "Hydrogen"], a: "Oxygen" },
+            { q: "What type of animal is a frog?", o: ["Amphibian", "Reptile", "Mammal", "Fish"], a: "Amphibian" },
+            { q: "What is the center of an atom called?", o: ["Nucleus", "Electron", "Proton", "Molecule"], a: "Nucleus" },
+            { q: "Which of these is a noble gas?", o: ["Helium", "Oxygen", "Nitrogen", "Carbon"], a: "Helium" },
+            { q: "What causes the ocean's tides?", o: ["The Moon's gravity", "Wind", "Earth's rotation", "The Sun's heat"], a: "The Moon's gravity" },
+            { q: "What organ pumps blood through the body?", o: ["Heart", "Brain", "Lungs", "Liver"], a: "Heart" },
+            { q: "What is the speed of light in a vacuum (approx)?", o: ["300,000 km/s", "150,000 km/s", "1,000 km/s", "3,000,000 km/s"], a: "300,000 km/s" },
+            // History (15)
+            { q: "Who was the first President of the United States?", o: ["George Washington", "Abraham Lincoln", "Thomas Jefferson", "John Adams"], a: "George Washington" },
+            { q: "In what year did World War II end?", o: ["1945", "1918", "1939", "1950"], a: "1945" },
+            { q: "Who painted the Mona Lisa?", o: ["Leonardo da Vinci", "Vincent van Gogh", "Pablo Picasso", "Claude Monet"], a: "Leonardo da Vinci" },
+            { q: "Which ancient civilization built the pyramids of Giza?", o: ["Egyptians", "Romans", "Greeks", "Mayans"], a: "Egyptians" },
+            { q: "Who discovered America in 1492?", o: ["Christopher Columbus", "Leif Erikson", "Ferdinand Magellan", "James Cook"], a: "Christopher Columbus" },
+            { q: "What empire was ruled by Julius Caesar?", o: ["Roman Empire", "Ottoman Empire", "Mongol Empire", "British Empire"], a: "Roman Empire" },
+            { q: "The Great Wall is located in which country?", o: ["China", "Japan", "India", "Mongolia"], a: "China" },
+            { q: "Who was the first woman to fly solo across the Atlantic?", o: ["Amelia Earhart", "Marie Curie", "Rosa Parks", "Florence Nightingale"], a: "Amelia Earhart" },
+            { q: "The Cold War was primarily between the USA and who?", o: ["Soviet Union", "Germany", "China", "United Kingdom"], a: "Soviet Union" },
+            { q: "What was the name of the ship that sank in 1912?", o: ["Titanic", "Lusitania", "Santa Maria", "Mayflower"], a: "Titanic" },
+            { q: "Who wrote 'Romeo and Juliet'?", o: ["William Shakespeare", "Charles Dickens", "Mark Twain", "Jane Austen"], a: "William Shakespeare" },
+            { q: "Which country gifted the Statue of Liberty to the USA?", o: ["France", "UK", "Spain", "Italy"], a: "France" },
+            { q: "Who was known as the Maid of Orléans?", o: ["Joan of Arc", "Queen Elizabeth I", "Catherine the Great", "Mary Antoinette"], a: "Joan of Arc" },
+            { q: "The Renaissance began in which country?", o: ["Italy", "France", "England", "Spain"], a: "Italy" },
+            { q: "Nelson Mandela was president of which country?", o: ["South Africa", "Kenya", "Nigeria", "Egypt"], a: "South Africa" }
+        ];
+
+        // --- 2. GAME STATE ---
+        let state = {
+            player: {
+                level: 1, exp: 0, gold: 0,
+                hp: 100, maxHpBase: 100,
+                mp: 50, maxMpBase: 50,
+                baseDmg: 10,
+                inventory: { hats: [], weapons: [], pets: [] },
+                equipped: { hat: null, weapon: null, pet: null }
+            },
+            monster: {
+                level: 1, hp: 28, maxHp: 28, emoji: '👹',
+                status: { poisonTurns: 0, frozenTurns: 0 }
+            },
+            combat: {
+                pendingAction: null,
+                isPlayerTurn: true
+            },
+            timer: {
+                workTime: 60 * 60, // 60 mins
+                breakTime: 10 * 60, // 10 mins
+                timeLeft: 60 * 60,
+                isBreak: false
+            }
+        };
+
+        // UI Element References
+        const els = {
+            hpBar: document.getElementById('ui-hp-bar'),
+            hpText: document.getElementById('ui-hp-text'),
+            mpBar: document.getElementById('ui-mp-bar'),
+            mpText: document.getElementById('ui-mp-text'),
+            level: document.getElementById('ui-level'),
+            exp: document.getElementById('ui-exp'),
+            maxExp: document.getElementById('ui-max-exp'),
+            gold: document.getElementById('ui-gold'),
+            timer: document.getElementById('ui-timer'),
+            log: document.getElementById('battle-log'),
+            monsterSprite: document.getElementById('monster-sprite'),
+            monsterHpBar: document.getElementById('monster-hp-bar'),
+            monsterHpText: document.getElementById('monster-hp-text'),
+            monsterStatus: document.getElementById('monster-status'),
+            monsterName: document.getElementById('monster-name')
+        };
+
+        // --- 3. CORE LOGIC ---
+        function startTimer() {
+            setInterval(() => {
+                state.timer.timeLeft--;
+                
+                if (state.timer.timeLeft <= 0) {
+                    if (state.timer.isBreak) {
+                        // Break over, back to work
+                        state.timer.isBreak = false;
+                        state.timer.timeLeft = state.timer.workTime;
+                        document.getElementById('break-modal').classList.remove('flex');
+                        document.getElementById('break-modal').classList.add('hidden');
+                        logMsg("You feel refreshed! Max HP and MP restored.");
+                        state.player.hp = getMaxHp();
+                        state.player.mp = getMaxMp();
+                        updateVitals();
+                    } else {
+                        // Work over, force break
+                        state.timer.isBreak = true;
+                        state.timer.timeLeft = state.timer.breakTime;
+                        document.getElementById('break-modal').classList.remove('hidden');
+                        document.getElementById('break-modal').classList.add('flex');
+                    }
+                }
+
+                // Format time
+                const m = Math.floor(state.timer.timeLeft / 60).toString().padStart(2, '0');
+                const s = (state.timer.timeLeft % 60).toString().padStart(2, '0');
+                const timeStr = `${m}:${s}`;
+                
+                if (state.timer.isBreak) {
+                    document.getElementById('break-timer-display').innerText = timeStr;
+                } else {
+                    els.timer.innerText = timeStr;
+                    // Color warning
+                    if (state.timer.timeLeft < 300) els.timer.className = 'rpg-font text-red-500 text-sm animate-pulse';
+                    else els.timer.className = 'rpg-font text-green-400 text-sm';
+                }
+            }, 1000);
+        }
+
+        // Stats calculation
+        function getMaxHp() {
+            let bonus = state.player.equipped.hat ? ITEMS.hats.find(i => i.id === state.player.equipped.hat).stats.hp : 0;
+            return state.player.maxHpBase + bonus;
+        }
+        function getMaxMp() { return state.player.maxMpBase + (state.player.level * 10); }
+        function getDmg() {
+            let bonus = state.player.equipped.weapon ? ITEMS.weapons.find(i => i.id === state.player.equipped.weapon).stats.dmg : 0;
+            return state.player.baseDmg + bonus + (state.player.level * 2);
+        }
+        function getLifesteal() {
+            return state.player.equipped.pet ? ITEMS.pets.find(i => i.id === state.player.equipped.pet).stats.ls : 0;
+        }
+        function getMaxExp() { return Math.floor(100 * Math.pow(1.5, state.player.level - 1)); }
+
+        function updateVitals() {
+            // Player
+            const maxHp = getMaxHp();
+            const maxMp = getMaxMp();
+            state.player.hp = Math.min(Math.max(state.player.hp, 0), maxHp);
+            state.player.mp = Math.min(Math.max(state.player.mp, 0), maxMp);
+            
+            els.hpText.innerText = `${state.player.hp}/${maxHp}`;
+            els.hpBar.style.width = `${(state.player.hp / maxHp) * 100}%`;
+            els.mpText.innerText = `${state.player.mp}/${maxMp}`;
+            els.mpBar.style.width = `${(state.player.mp / maxMp) * 100}%`;
+            els.level.innerText = state.player.level;
+            els.exp.innerText = state.player.exp;
+            els.maxExp.innerText = getMaxExp();
+            els.gold.innerText = state.player.gold;
+
+            // Monster
+            els.monsterHpText.innerText = `${state.monster.hp}/${state.monster.maxHp}`;
+            els.monsterHpBar.style.width = `${(state.monster.hp / state.monster.maxHp) * 100}%`;
+
+            // Avatar Updates
+            const hIcon = state.player.equipped.hat ? ITEMS.hats.find(i=>i.id===state.player.equipped.hat).icon : '';
+            const wIcon = state.player.equipped.weapon ? ITEMS.weapons.find(i=>i.id===state.player.equipped.weapon).icon : '';
+            const pIcon = state.player.equipped.pet ? ITEMS.pets.find(i=>i.id===state.player.equipped.pet).icon : '';
+            
+            document.getElementById('avatar-hat-battle').innerText = hIcon;
+            document.getElementById('avatar-weapon-battle').innerText = wIcon;
+            document.getElementById('avatar-pet-battle').innerText = pIcon;
+            document.getElementById('avatar-hat-wardrobe').innerText = hIcon;
+            document.getElementById('avatar-weapon-wardrobe').innerText = wIcon;
+            document.getElementById('avatar-pet-wardrobe').innerText = pIcon;
+
+            // Wardrobe Stat Bonuses
+            document.getElementById('stat-bonus-hp').innerText = `+${state.player.equipped.hat ? ITEMS.hats.find(i=>i.id===state.player.equipped.hat).stats.hp : 0}`;
+            document.getElementById('stat-bonus-dmg').innerText = `+${state.player.equipped.weapon ? ITEMS.weapons.find(i=>i.id===state.player.equipped.weapon).stats.dmg : 0}`;
+            document.getElementById('stat-bonus-ls').innerText = `+${getLifesteal()}`;
+        }
+
+        function logMsg(msg, color = 'text-slate-300') {
+            const entry = document.createElement('div');
+            entry.innerHTML = `<span class="${color}">${msg}</span>`;
+            els.log.appendChild(entry);
+            els.log.scrollTop = els.log.scrollHeight;
+        }
+
+        function showToast(msg) {
+            const toaster = document.getElementById('toaster');
+            document.getElementById('toaster-text').innerText = msg;
+            toaster.classList.remove('opacity-0', 'translate-y-[-20px]');
+            setTimeout(() => {
+                toaster.classList.add('opacity-0', 'translate-y-[-20px]');
+            }, 2500);
+        }
+
+        function floatingText(targetId, text, colorClass) {
+            const target = document.getElementById(targetId);
+            const rect = target.getBoundingClientRect();
+            const el = document.createElement('div');
+            el.className = `floating-text ${colorClass} text-xl`;
+            el.innerText = text;
+            el.style.left = `${rect.left + rect.width / 2}px`;
+            el.style.top = `${rect.top}px`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1500);
+        }
+
+        function renderSpells() {
+            const container = document.getElementById('spell-container');
+            container.innerHTML = '';
+            SPELLS.forEach(spell => {
+                const btn = document.createElement('button');
+                const canAfford = state.player.mp >= spell.cost;
+                btn.className = `p-3 rounded-lg flex flex-col items-start transition-all ${canAfford ? spell.color + ' cursor-pointer' : 'bg-slate-700 opacity-50 cursor-not-allowed'}`;
+                btn.onclick = () => initiateAction(spell);
+                btn.innerHTML = `
+                    <div class="flex justify-between w-full font-bold text-white mb-1">
+                        <span>${spell.icon} ${spell.name}</span>
+                        <span class="text-xs bg-black/30 px-2 py-1 rounded">${spell.cost} MP</span>
+                    </div>
+                    <div class="text-xs text-white/80 text-left">${spell.desc}</div>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function initiateAction(spell) {
+            if (!state.combat.isPlayerTurn) return showToast("It's not your turn!");
+            if (state.player.mp < spell.cost) return showToast("Not enough MP!");
+            
+            // Prodigy style: Consume MP FIRST. 
+            state.player.mp -= spell.cost;
+            state.combat.pendingAction = spell;
+            updateVitals();
+            renderSpells(); // update button states
+            
+            fetchQuestion();
+        }
+
+        async function fetchQuestion() {
+            const modal = document.getElementById('question-modal');
+            const loading = document.getElementById('question-loading');
+            const content = document.getElementById('question-content');
+            
+            modal.classList.remove('hidden');
+            loading.classList.remove('hidden');
+            content.classList.add('hidden');
+            document.getElementById('casting-spell-name').innerText = `Casting: ${state.combat.pendingAction.name}`;
+
+            const apiKey = document.getElementById('api-key').value.trim();
+            const topic = document.getElementById('topic-input').value.trim() || 'general knowledge';
+
+            let qData = null;
+
+            if (apiKey) {
+                try {
+                    const prompt = `Generate a single multiple choice question about ${topic}. Ensure it is educational. Return ONLY valid JSON in this exact structure: {"question": "Question text?", "options": ["Option1", "Option2", "Option3", "Option4"], "answer": "The exact string of the correct option"}`;
+                    
+                    const payload = {
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { responseMimeType: "application/json" }
+                    };
+                    
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+                    
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) throw new Error("API limit or error");
+                    
+                    const result = await response.json();
+                    const textStr = result.candidates[0].content.parts[0].text;
+                    qData = JSON.parse(textStr);
+
+                    // Basic validation
+                    if (!qData.question || !Array.isArray(qData.options) || !qData.answer) throw new Error("Invalid schema");
+                } catch (e) {
+                    console.warn("Gemini fetch failed, falling back to mock DB", e);
+                    qData = getRandomMockQuestion();
+                }
+            } else {
+                qData = getRandomMockQuestion();
+            }
+
+            renderQuestion(qData);
+        }
+
+        function getRandomMockQuestion() {
+            return MOCK_DB[Math.floor(Math.random() * MOCK_DB.length)];
+        }
+
+        function renderQuestion(qData) {
+            document.getElementById('question-loading').classList.add('hidden');
+            document.getElementById('question-content').classList.remove('hidden');
+            
+            document.getElementById('question-text').innerText = qData.question || qData.q;
+            
+            const optionsContainer = document.getElementById('question-options');
+            optionsContainer.innerHTML = '';
+            
+            let options = qData.options || qData.o;
+            let answer = qData.answer || qData.a;
+
+            // Shuffle options
+            options = options.sort(() => Math.random() - 0.5);
+
+            options.forEach(opt => {
+                const btn = document.createElement('button');
+                btn.className = "w-full text-left p-4 rounded-xl bg-slate-700 hover:bg-slate-600 border border-slate-600 transition-colors text-white font-medium";
+                btn.innerText = opt;
+                btn.onclick = () => handleAnswer(opt === answer);
+                optionsContainer.appendChild(btn);
+            });
+        }
+
+        function handleAnswer(isCorrect) {
+            document.getElementById('question-modal').classList.add('hidden');
+            
+            if (isCorrect) {
+                logMsg(`Correct! You successfully cast <span class="font-bold">${state.combat.pendingAction.name}</span>.`, 'text-green-400');
+                executePlayerAction();
+            } else {
+                logMsg(`Incorrect! Your concentration breaks and the spell fizzles. MP lost.`, 'text-red-400');
+                showToast("Spell Failed!");
+                floatingText('player-avatar-battle', 'Fizzle!', 'text-gray-400');
+                endPlayerTurn();
+            }
+        }
+
+        function executePlayerAction() {
+            const spell = state.combat.pendingAction;
+            els.monsterSprite.classList.add('animate-damage');
+            setTimeout(() => els.monsterSprite.classList.remove('animate-damage'), 400);
+
+            if (spell.id === 'strike') {
+                let dmg = getDmg();
+                damageMonster(dmg);
+                logMsg(`You strike for ${dmg} damage!`);
+                applyLifesteal(dmg);
+            } 
+            else if (spell.id === 'heal') {
+                let healAmt = 40;
+                state.player.hp = Math.min(state.player.hp + healAmt, getMaxHp());
+                floatingText('player-avatar-battle', `+${healAmt}`, 'text-green-400');
+                logMsg(`You heal yourself for ${healAmt} HP.`, 'text-green-400');
+            }
+            else if (spell.id === 'poison') {
+                state.monster.status.poisonTurns = 3;
+                updateMonsterStatus();
+                floatingText('monster-sprite', 'Poisoned!', 'text-purple-400');
+                logMsg(`You poisoned the monster for 3 turns!`, 'text-purple-400');
+            }
+            else if (spell.id === 'freeze') {
+                state.monster.status.frozenTurns = 1;
+                updateMonsterStatus();
+                floatingText('monster-sprite', 'Frozen!', 'text-cyan-400');
+                logMsg(`Monster is frozen and will miss its next turn!`, 'text-cyan-400');
+            }
+
+            updateVitals();
+            
+            if (state.monster.hp > 0) {
+                endPlayerTurn();
+            }
+        }
+
+        function damageMonster(amt) {
+            state.monster.hp -= amt;
+            floatingText('monster-sprite', `-${amt}`, 'text-red-500');
+            if (state.monster.hp <= 0) {
+                state.monster.hp = 0;
+                monsterDefeated();
+            }
+            updateVitals();
+        }
+
+        function applyLifesteal(dmg) {
+            const ls = getLifesteal();
+            if (ls > 0 && state.player.hp < getMaxHp()) {
+                state.player.hp = Math.min(state.player.hp + ls, getMaxHp());
+                floatingText('player-avatar-battle', `+${ls}`, 'text-green-400');
+            }
+        }
+
+        function endPlayerTurn() {
+            state.combat.isPlayerTurn = false;
+            
+            // Process Monster DoTs
+            setTimeout(() => {
+                if (state.monster.hp > 0 && state.monster.status.poisonTurns > 0) {
+                    let pDmg = 8;
+                    state.monster.status.poisonTurns--;
+                    damageMonster(pDmg);
+                    logMsg(`Monster takes ${pDmg} poison damage.`, 'text-purple-400');
+                    updateMonsterStatus();
+                }
+
+                if (state.monster.hp > 0) {
+                    setTimeout(monsterTurn, 1000);
+                }
+            }, 800);
+        }
+
+        function monsterTurn() {
+            if (state.monster.status.frozenTurns > 0) {
+                state.monster.status.frozenTurns--;
+                logMsg("Monster is frozen and skips its turn!", 'text-cyan-400');
+                floatingText('monster-sprite', 'Ice Blocked!', 'text-cyan-400');
+                updateMonsterStatus();
+            } else {
+                // Monster Attack
+                let mDmg = Math.floor(5 + (state.monster.level * 3) + (Math.random() * 4));
+                state.player.hp -= mDmg;
+                
+                document.getElementById('player-avatar-battle').classList.add('animate-damage');
+                setTimeout(() => document.getElementById('player-avatar-battle').classList.remove('animate-damage'), 400);
+                
+                floatingText('player-avatar-battle', `-${mDmg}`, 'text-red-500');
+                logMsg(`Monster attacks for ${mDmg} damage!`, 'text-red-400');
+                
+                if (state.player.hp <= 0) {
+                    state.player.hp = 0;
+                    updateVitals();
+                    playerDefeated();
+                    return;
+                }
+            }
+            
+            updateVitals();
+            state.combat.isPlayerTurn = true;
+            renderSpells();
+        }
+
+        function updateMonsterStatus() {
+            els.monsterStatus.innerHTML = '';
+            if (state.monster.status.poisonTurns > 0) els.monsterStatus.innerHTML += `<span class="bg-purple-900 rounded-full w-6 h-6 flex items-center justify-center text-xs animate-pulse" title="Poisoned">🧪</span>`;
+            if (state.monster.status.frozenTurns > 0) els.monsterStatus.innerHTML += `<span class="bg-cyan-900 rounded-full w-6 h-6 flex items-center justify-center text-xs" title="Frozen">❄️</span>`;
+        }
+
+        function monsterDefeated() {
+            els.monsterSprite.classList.add('opacity-0', 'scale-50', 'transition-all', 'duration-500');
+            const expGain = 20 + (state.monster.level * 5);
+            const goldGain = 10 + (state.monster.level * 2);
+            
+            logMsg(`Victory! Gained ${expGain} Exp and ${goldGain} Gold.`, 'text-yellow-400');
+            
+            // Restoring +30 MP and +20 HP on kill as requested
+            state.player.mp = Math.min(state.player.mp + 30, getMaxMp());
+            state.player.hp = Math.min(state.player.hp + 20, getMaxHp());
+            logMsg(`Restored 20 HP and 30 MP from combat adrenaline.`, 'text-blue-300');
+
+            state.player.exp += expGain;
+            state.player.gold += goldGain;
+
+            // Level up logic
+            if (state.player.exp >= getMaxExp()) {
+                state.player.exp -= getMaxExp();
+                state.player.level++;
+                state.player.hp = getMaxHp(); // Full heal on level up
+                state.player.mp = getMaxMp();
+                logMsg(`LEVEL UP! You are now Level ${state.player.level}.`, 'text-green-400 font-bold text-lg');
+                showToast(`Level ${state.player.level} Reached!`);
+            }
+
+            updateVitals();
+
+            // Spawn next
+            setTimeout(spawnMonster, 1500);
+        }
+
+        function spawnMonster() {
+            state.monster.level = state.player.level;
+            // Linear scaling (Monster HP = 20 + Lvl*8)
+            state.monster.maxHp = 20 + (state.monster.level * 8); 
+            state.monster.hp = state.monster.maxHp;
+            state.monster.emoji = MONSTER_EMOJIS[Math.floor(Math.random() * MONSTER_EMOJIS.length)];
+            state.monster.status = { poisonTurns: 0, frozenTurns: 0 };
+            
+            els.monsterSprite.innerText = state.monster.emoji;
+            els.monsterSprite.classList.remove('opacity-0', 'scale-50');
+            els.monsterSprite.classList.add('animate-pop');
+            els.monsterName.innerText = `Lvl ${state.monster.level} Fiend`;
+            
+            logMsg(`A new Lvl ${state.monster.level} monster appears!`);
+            updateVitals();
+            updateMonsterStatus();
+            state.combat.isPlayerTurn = true;
+            renderSpells();
+        }
+
+        function playerDefeated() {
+            logMsg(`You were defeated... Taking a moment to recover.`, 'text-red-500 font-bold');
+            showToast("Defeated!");
+            state.player.gold = Math.floor(state.player.gold * 0.9); // lose 10% gold
+            
+            setTimeout(() => {
+                state.player.hp = getMaxHp();
+                state.player.mp = getMaxMp();
+                spawnMonster();
+            }, 3000);
+        }
+
+        function renderShop() {
+            const container = document.getElementById('shop-items-container');
+            container.innerHTML = '';
+
+            const renderCategory = (items, category, color) => {
+                items.forEach(item => {
+                    const isOwned = state.player.inventory[category].includes(item.id);
+                    const div = document.createElement('div');
+                    div.className = `bg-slate-800 border border-slate-700 p-4 rounded-xl flex flex-col items-center relative ${isOwned ? 'opacity-50' : ''}`;
+                    div.innerHTML = `
+                        <div class="text-4xl mb-2">${item.icon}</div>
+                        <div class="font-bold text-white text-center">${item.name}</div>
+                        <div class="text-xs ${color} mb-3 text-center h-8">${item.desc}</div>
+                        ${isOwned 
+                            ? `<button disabled class="bg-slate-700 text-slate-400 px-4 py-2 rounded-lg text-sm w-full font-bold">Owned</button>`
+                            : `<button onclick="buyItem('${category}', '${item.id}')" class="bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm w-full font-bold flex justify-center items-center gap-1"><span>💰</span> ${item.price}</button>`
+                        }
+                    `;
+                    container.appendChild(div);
+                });
+            };
+
+            renderCategory(ITEMS.hats, 'hats', 'text-green-300');
+            renderCategory(ITEMS.weapons, 'weapons', 'text-red-300');
+            renderCategory(ITEMS.pets, 'pets', 'text-purple-300');
+        }
+
+        function buyItem(category, id) {
+            const list = ITEMS[category];
+            const item = list.find(i => i.id === id);
+            if (!item) return;
+
+            if (state.player.gold >= item.price) {
+                state.player.gold -= item.price;
+                state.player.inventory[category].push(id);
+                showToast(`Purchased ${item.name}!`);
+                logMsg(`Purchased ${item.name} for ${item.price} gold.`, 'text-yellow-400');
+                updateVitals();
+                renderShop();
+                renderWardrobe();
+            } else {
+                showToast("Not enough Gold!");
+            }
+        }
+
+        function renderWardrobe() {
+            const container = document.getElementById('inventory-container');
+            container.innerHTML = '';
+
+            const renderInvCategory = (title, items, invList, categoryKey, currentEquip) => {
+                const wrapper = document.createElement('div');
+                wrapper.className = "bg-slate-800 rounded-xl p-4 border border-slate-700";
+                
+                let html = `<h4 class="text-slate-400 text-xs font-bold uppercase mb-3 border-b border-slate-700 pb-1">${title}</h4>`;
+                html += `<div class="flex flex-wrap gap-2">`;
+                
+                // Add "None" option
+                const noneActive = currentEquip === null ? 'ring-2 ring-blue-500 bg-blue-900/30' : 'bg-slate-700 hover:bg-slate-600';
+                html += `<button onclick="equipItem('${categoryKey}', null)" class="${noneActive} w-12 h-12 rounded-lg flex items-center justify-center text-xs text-slate-400 transition-all">None</button>`;
+
+                invList.forEach(id => {
+                    const item = items.find(i => i.id === id);
+                    const isActive = currentEquip === id ? 'ring-2 ring-blue-500 bg-blue-900/30' : 'bg-slate-700 hover:bg-slate-600';
+                    html += `<button onclick="equipItem('${categoryKey}', '${id}')" title="${item.name}\n${item.desc}" class="${isActive} w-12 h-12 rounded-lg flex items-center justify-center text-2xl transition-all">${item.icon}</button>`;
+                });
+                
+                html += `</div>`;
+                wrapper.innerHTML = html;
+                container.appendChild(wrapper);
+            };
+
+            renderInvCategory('Hats', ITEMS.hats, state.player.inventory.hats, 'hat', state.player.equipped.hat);
+            renderInvCategory('Weapons', ITEMS.weapons, state.player.inventory.weapons, 'weapon', state.player.equipped.weapon);
+            renderInvCategory('Pets', ITEMS.pets, state.player.inventory.pets, 'pet', state.player.equipped.pet);
+        }
+
+        window.equipItem = function(slot, id) {
+            state.player.equipped[slot] = id;
+            updateVitals();
+            renderWardrobe();
+        };
+
+        window.switchTab = function(tabId) {
+            ['battle', 'shop', 'wardrobe', 'log'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`nav-${t}`).classList.remove('text-white', 'bg-slate-800', 'border-blue-500');
+            });
+            
+            document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+            if(tabId === 'log') document.getElementById(`tab-${tabId}`).classList.add('flex');
+            document.getElementById(`nav-${tabId}`).classList.add('text-white', 'bg-slate-800', 'border-blue-500');
+            
+            if (tabId === 'shop') renderShop();
+            if (tabId === 'wardrobe') renderWardrobe();
+            if (tabId === 'log') els.log.scrollTop = els.log.scrollHeight;
+        };
+
+        // Initialize Game
+        function init() {
+            startTimer();
+            renderSpells();
+            updateVitals();
+            spawnMonster();
+            switchTab('battle');
+            
+            // Give starter gear logic (optional, keeping empty for pure progression)
+            // state.player.inventory.weapons.push('w1'); 
+        }
+
+        // Start when ready
+        window.onload = init;
+    </script>
+</body>
+</html>
